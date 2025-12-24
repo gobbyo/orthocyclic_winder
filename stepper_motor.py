@@ -20,40 +20,24 @@ class StepperMotor28BYJ48:
         [1, 0, 0, 1]
     ]
     
-    # 4-step sequence (wave drive - lower power consumption)
-    WAVE_STEP_SEQUENCE = [
-        [1, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, 0, 1, 0],
-        [0, 0, 0, 1]
-    ]
-    
     STEPS_PER_REV = 2048  # With gear reduction (64 * 32 = 2048)
     
-    def __init__(self, in1_pin, in2_pin, in3_pin, in4_pin, sequence='full'):
+    def __init__(self, in1_pin, in2_pin, in3_pin, in4_pin):
         """
         Initialize the stepper motor.
         
         Args:
             in1_pin, in2_pin, in3_pin, in4_pin: GPIO pin numbers for motor control
-            sequence: 'full' for 8-step sequence or 'wave' for 4-step sequence
         """
         self.pins = [
-            Pin(in1_pin, Pin.OUT),
-            Pin(in2_pin, Pin.OUT),
-            Pin(in3_pin, Pin.OUT),
-            Pin(in4_pin, Pin.OUT)
+            Pin(in1_pin, Pin.OUT, value=0),
+            Pin(in2_pin, Pin.OUT, value=0),
+            Pin(in3_pin, Pin.OUT, value=0),
+            Pin(in4_pin, Pin.OUT, value=0)
         ]
         
-        # Turn off all coils immediately to prevent unintended movement
-        for pin in self.pins:
-            pin.value(0)
-        
-        # Select step sequence
-        if sequence == 'wave':
-            self.sequence = self.WAVE_STEP_SEQUENCE
-        else:
-            self.sequence = self.FULL_STEP_SEQUENCE
+        # Use 8-step sequence
+        self.sequence = self.FULL_STEP_SEQUENCE
             
         self.current_step = 0
         self.step_delay = 0.002  # Default delay between steps (2ms)
@@ -73,7 +57,7 @@ class StepperMotor28BYJ48:
         for i in range(4):
             self.pins[i].value(self.sequence[step][i])
     
-    def step(self, steps, direction=1, delay=None):
+    def step(self, steps, direction=1, delay=None, release_after=True):
         """
         Move the motor a specified number of steps.
         
@@ -81,59 +65,23 @@ class StepperMotor28BYJ48:
             steps: Number of steps to move
             direction: 1 for clockwise, -1 for counter-clockwise
             delay: Delay between steps in seconds (uses default if None)
+            release_after: Whether to de-energize coils after movement (default True)
         """
         if delay is None:
             delay = self.step_delay
-            
-        for _ in range(abs(steps)):
+        
+        steps_to_perform = abs(steps)
+        for _ in range(steps_to_perform):
             self._set_step(self.current_step)
             self.current_step = (self.current_step + direction) % len(self.sequence)
-            self.total_steps += 1  # Increment step counter
             time.sleep(delay)
         
-        # De-energize coils after completing movement
-        self.release()
-    
-    def rotate(self, degrees, direction=1, delay=None):
-        """
-        Rotate the motor by a specified number of degrees.
+        # Update counter once after all steps complete (atomic write)
+        self.total_steps += steps_to_perform
         
-        Args:
-            degrees: Number of degrees to rotate
-            direction: 1 for clockwise, -1 for counter-clockwise
-            delay: Delay between steps in seconds
-        """
-        steps = int((degrees / 360.0) * self.STEPS_PER_REV)
-        self.step(steps, direction, delay)
-    
-    def rotate_continuously(self, direction=1, rpm=10):
-        """
-        Rotate the motor continuously at a specified RPM.
-        Call release() to stop.
-        
-        Args:
-            direction: 1 for clockwise, -1 for counter-clockwise
-            rpm: Rotations per minute
-        """
-        # Calculate delay based on RPM
-        delay = 60.0 / (rpm * self.STEPS_PER_REV * len(self.sequence) / 8)
-        
-        try:
-            while True:
-                self._set_step(self.current_step)
-                self.current_step = (self.current_step + direction) % len(self.sequence)
-                time.sleep(delay)
-        except KeyboardInterrupt:
+        # Optionally de-energize coils after completing movement
+        if release_after:
             self.release()
-    
-    def set_speed(self, rpm):
-        """
-        Set the motor speed in RPM.
-        
-        Args:
-            rpm: Rotations per minute
-        """
-        self.step_delay = 60.0 / (rpm * self.STEPS_PER_REV * len(self.sequence) / 8)
     
     def release(self):
         """Turn off all motor coils to save power and prevent heating."""
@@ -163,95 +111,75 @@ class StepperMotor28BYJ48:
         })
         return True
     
-    def queue_rotate(self, degrees, direction=1, delay=None):
-        """
-        Add a rotate command to the queue.
-        
-        Args:
-            degrees: Number of degrees to rotate
-            direction: 1 for clockwise, -1 for counter-clockwise
-            delay: Delay between steps in seconds
-        
-        Returns:
-            bool: True if added successfully, False if queue is full
-        """
-        steps = int((degrees / 360.0) * self.STEPS_PER_REV)
-        return self.queue_step(steps, direction, delay)
-    
     def execute_queue(self):
         """
-        Execute all commands in the queue sequentially.
+        Execute one command from the queue.
+        This allows new commands to be processed more responsively.
         """
+        # Check if already executing (atomic read)
         if self.is_executing:
             return False
         
+        # Check if queue has commands
+        if not self.command_queue:
+            return False
+        
+        # Set executing flag (atomic write)
         self.is_executing = True
         
+        # Get command from queue (popleft is atomic)
+        command = self.command_queue.popleft()
+        
+        # Execute without any locks to ensure smooth motion
         try:
-            while self.command_queue:
-                command = self.command_queue.popleft()
-                
-                if command['type'] == 'step':
-                    self.step(
-                        command['steps'],
-                        command['direction'],
-                        command['delay']
-                    )
+            if command['type'] == 'step':
+                # Always execute without releasing to maintain smooth motion
+                self.step(
+                    command['steps'],
+                    command['direction'],
+                    command['delay'],
+                    release_after=False
+                )
         finally:
+            # Clear executing flag (atomic write)
             self.is_executing = False
         
         return True
     
+    def execute_all_queued(self):
+        """
+        Execute all commands in the queue continuously.
+        Keeps processing until queue is empty.
+        Release coils only when completely done.
+        """
+        executed_any = False
+        while self.command_queue:
+            if self.execute_queue():
+                executed_any = True
+        
+        # Only release coils after ALL commands are done
+        if executed_any:
+            time.sleep(0.05)  # Small delay before checking if truly done
+            if not self.command_queue:  # Double-check queue is still empty
+                self.release()
+    
     def clear_queue(self):
         """Clear all commands from the queue."""
-        self.command_queue.clear()
+        while self.command_queue:
+            self.command_queue.popleft()
     
     def queue_length(self):
         """Return the number of commands in the queue."""
         return len(self.command_queue)
     
+    def is_executing_now(self):
+        """Check if motor is currently executing (atomic read, no lock)."""
+        return self.is_executing
+    
     def get_step_count(self):
-        """Return the total number of steps performed."""
+        """Return the total number of steps performed (atomic read)."""
         return self.total_steps
     
     def reset_step_count(self):
         """Reset the step counter to zero."""
         self.total_steps = 0
-
-
-# Example usage
-if __name__ == "__main__":
-    # Initialize motor with GPIO pins (adjust these to your wiring)
-    motor = StepperMotor28BYJ48(in1_pin=2, in2_pin=3, in3_pin=4, in4_pin=5)
-
-    motor.step(4096, direction=1)  # Step clockwise
-    time.sleep(1)
-    motor.step(2048, direction=-1)  # Step counter clockwise
-    time.sleep(1)
-    motor.step(1024, direction=-1)  # Step counter clockwise
-    time.sleep(1)
-    motor.step(512, direction=-1)  # Step counter clockwise
-    time.sleep(1)
-    motor.step(512, direction=-1)  # Step counter clockwise
-    time.sleep(1)
-
-    for i in range(512):
-        motor.step(1, direction=1)  # Step clockwise
-        time.sleep(0.05)
-
-    #print("Rotating 360 degrees clockwise...")
-    #motor.rotate(360, direction=1)
-    #time.sleep(1)
-    
-    #print("Rotating 360 degrees counter-clockwise...")
-    #motor.rotate(360, direction=-1)
-    #time.sleep(1)
-    
-    #print("Rotating at 15 RPM for 5 seconds...")
-    #motor.set_speed(15)
-    #start_time = time.time()
-    #while time.time() - start_time < 5:
-    #    motor.step(1, direction=1)
-    
-    print("Done!")
-    motor.release()

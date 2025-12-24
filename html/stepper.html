@@ -197,7 +197,6 @@
                     if (response.ok) {
                         const result = await response.json();
                         showStatus(result.message || 'Motor moved successfully', false);
-                        updateStatus();
                     } else {
                         showStatus('Error moving motor', true);
                     }
@@ -206,20 +205,21 @@
                 }
             }
             
-            async function updateStatus() {
-                try {
-                    const response = await fetch('/stepper/status');
-                    if (response.ok) {
-                        const data = await response.json();
-                        document.getElementById('totalSteps').textContent = data.total_steps || 0;
-                        document.getElementById('queueLength').textContent = data.queue_length || 0;
-                        document.getElementById('executionStatus').textContent = 
-                            data.is_executing ? 'Executing' : 'Idle';
-                    }
-                } catch (error) {
-                    console.error('Error fetching status:', error);
-                }
-            }
+            // Status updates temporarily disabled
+            // async function updateStatus() {
+            //     try {
+            //         const response = await fetch('/stepper/status');
+            //         if (response.ok) {
+            //             const data = await response.json();
+            //             document.getElementById('totalSteps').textContent = data.total_steps || 0;
+            //             document.getElementById('queueLength').textContent = data.queue_length || 0;
+            //             document.getElementById('executionStatus').textContent = 
+            //                 data.is_executing ? 'Executing' : 'Idle';
+            //         }
+            //     } catch (error) {
+            //         console.error('Error fetching status:', error);
+            //     }
+            // }
             
             async function resetCounter() {
                 const statusDiv = document.getElementById('status');
@@ -233,7 +233,6 @@
                     if (response.ok) {
                         const result = await response.json();
                         showStatus(result.message || 'Counter reset successfully', false);
-                        updateStatus();
                     } else {
                         showStatus('Error resetting counter', true);
                     }
@@ -260,9 +259,9 @@
                 }
             });
             
-            // Update status periodically
-            updateStatus();
-            setInterval(updateStatus, 1000);
+            // Periodic status updates disabled for testing
+            // updateStatus();
+            // setInterval(updateStatus, 1000);
         </script>
     </body>
 </html>

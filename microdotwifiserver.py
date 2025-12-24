@@ -32,9 +32,6 @@ class AP_IF_Wifi:
         # Queue processing control
         self.queue_processing = True
         self.queue_thread = None
-        
-        # Track last status for change detection
-        self.last_status = {'queue_length': 0, 'is_executing': False, 'total_steps': 0}
 
     def __del__(self):
         self.wifi.disconnect()
@@ -66,10 +63,12 @@ class AP_IF_Wifi:
         """Background thread to process stepper command queue."""
         logging.info("Queue processor thread started")
         while self.queue_processing:
-            if self.stepper.queue_length() > 0 and not self.stepper.is_executing:
+            # Execute queue continuously without frequent checks
+            if self.stepper.queue_length() > 0 and not self.stepper.is_executing_now():
                 logging.info(f"Processing queue with {self.stepper.queue_length()} commands")
-                self.stepper.execute_queue()
-            time.sleep(0.1)  # Check queue every 100ms
+                # Process all queued commands
+                self.stepper.execute_all_queued()
+            time.sleep(1.0)  # Sleep longer between queue checks
         logging.info("Queue processor thread stopped")
     
     def start_queue_processor(self):
@@ -147,29 +146,24 @@ class AP_IF_Wifi:
                     'message': str(e)
                 }), 500, {'Content-Type': 'application/json'}
 
-        @app.get('/stepper/status')
-        async def stepper_status(request):
-            try:
-                current_status = {
-                    'queue_length': self.stepper.queue_length(),
-                    'is_executing': self.stepper.is_executing,
-                    'total_steps': self.stepper.get_step_count()
-                }
-                
-                # Only log if status has changed
-                if current_status != self.last_status:
-                    logging.info(f'Status changed: queue={current_status["queue_length"]}, executing={current_status["is_executing"]}, steps={current_status["total_steps"]}')
-                    self.last_status = current_status.copy()
-                
-                response_data = {'status': 'success'}
-                response_data.update(current_status)
-                return ujson.dumps(response_data), 200, {'Content-Type': 'application/json'}
-            except Exception as e:
-                logging.error(f"Error getting stepper status: {e}")
-                return ujson.dumps({
-                    'status': 'error',
-                    'message': str(e)
-                }), 500, {'Content-Type': 'application/json'}
+        # Status endpoint temporarily disabled for testing
+        # @app.get('/stepper/status')
+        # async def stepper_status(request):
+        #     try:
+        #         current_status = {
+        #             'queue_length': self.stepper.queue_length(),
+        #             'is_executing': self.stepper.is_executing_now(),
+        #             'total_steps': self.stepper.get_step_count()
+        #         }
+        #         response_data = {'status': 'success'}
+        #         response_data.update(current_status)
+        #         return ujson.dumps(response_data), 200, {'Content-Type': 'application/json'}
+        #     except Exception as e:
+        #         logging.error(f"Error getting stepper status: {e}")
+        #         return ujson.dumps({
+        #             'status': 'error',
+        #             'message': str(e)
+        #         }), 500, {'Content-Type': 'application/json'}
         
         @app.post('/stepper/clear')
         async def stepper_clear(request):

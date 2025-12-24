@@ -1,11 +1,10 @@
 # Orthocyclic Winder
 
-An **orthocyclic** winder is a coil‑winding machine designed to place each turn of magnet wire in a hexagonally packed pattern, where each layer nests into the “valleys” of the layer below. This produces the highest possible copper fill factor for round wire—often around 70%. In cross‑section, the turns form a honeycomb pattern, which is the densest packing achievable for circles in 2D. Orthocyclic winding requires:
+An **orthocyclic** winder is a coil‑winding machine designed to place each turn of magnet wire in a hexagonally packed pattern, where each layer nests into the “valleys” of the layer below. This produces the highest possible copper fill factor for round wire. In cross‑section, the turns form a honeycomb pattern, which is the densest packing achievable for circles in 2D. Orthocyclic winding requires:
 
 - Precise traverse synchronization with spindle rotation
 - Constant wire tension
 - Accurate layer‑to‑layer alignment
-- Often self‑bonding wire, heated during winding so the coil becomes self‑supporting
 
 This is far more demanding than simple helical or wild winding.
 
