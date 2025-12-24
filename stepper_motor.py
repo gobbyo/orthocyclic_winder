@@ -22,12 +22,13 @@ class StepperMotor28BYJ48:
     
     STEPS_PER_REV = 2048  # With gear reduction (64 * 32 = 2048)
     
-    def __init__(self, in1_pin, in2_pin, in3_pin, in4_pin):
+    def __init__(self, in1_pin, in2_pin, in3_pin, in4_pin, logger=None):
         """
         Initialize the stepper motor.
         
         Args:
             in1_pin, in2_pin, in3_pin, in4_pin: GPIO pin numbers for motor control
+            logger: Optional logging function to call with log messages
         """
         self.pins = [
             Pin(in1_pin, Pin.OUT, value=0),
@@ -48,6 +49,9 @@ class StepperMotor28BYJ48:
         
         # Step counter (total steps performed)
         self.total_steps = 0
+        
+        # Logger callback
+        self.logger = logger
         
         # Ensure motor is off after initialization
         self.release()
@@ -152,16 +156,43 @@ class StepperMotor28BYJ48:
         Keeps processing until queue is empty.
         Release coils only when completely done.
         """
-        executed_any = False
-        while self.command_queue:
-            if self.execute_queue():
-                executed_any = True
+        if not self.command_queue:
+            return
         
-        # Only release coils after ALL commands are done
-        if executed_any:
-            time.sleep(0.05)  # Small delay before checking if truly done
-            if not self.command_queue:  # Double-check queue is still empty
-                self.release()
+        # Set executing flag once for the entire batch
+        self.is_executing = True
+        
+        try:
+            # Process all commands without releasing executing flag
+            while self.command_queue:
+                command = self.command_queue.popleft()
+                
+                if command['type'] == 'step':
+                    # Log command details before execution
+                    direction_str = "forward" if command['direction'] == 1 else "backward"
+                    queue_remaining = len(self.command_queue) + 1  # Include current command
+                    log_msg = f"Executing: {command['steps']} steps {direction_str} (queue: {queue_remaining})"
+                    if self.logger:
+                        self.logger(log_msg)
+                    else:
+                        print(log_msg)
+                    
+                    # Execute without releasing coils or changing executing flag
+                    self.step(
+                        command['steps'],
+                        command['direction'],
+                        command['delay'],
+                        release_after=False
+                    )
+        finally:
+            # Clear executing flag only after all commands complete
+            self.is_executing = False
+            
+            # Check if new commands were added during execution
+            if not self.command_queue:
+                time.sleep(0.05)  # Small delay before checking again
+                if not self.command_queue:  # Double-check queue is still empty
+                    self.release()
     
     def clear_queue(self):
         """Clear all commands from the queue."""

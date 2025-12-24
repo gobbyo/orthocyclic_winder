@@ -25,13 +25,32 @@ class AP_IF_Wifi:
         Request.max_content_length = 1024 * 1024  # 1MB (change as needed)
         
         # Initialize stepper motor (adjust GPIO pins as needed)
-        self.stepper = StepperMotor28BYJ48(in1_pin=2, in2_pin=3, in3_pin=4, in4_pin=5)
+        self.stepper = StepperMotor28BYJ48(in1_pin=2, in2_pin=3, in3_pin=4, in4_pin=5, logger=self.log)
         # Explicitly ensure motor is off
         self.stepper.release()
         
         # Queue processing control
         self.queue_processing = True
         self.queue_thread = None
+        
+        # In-memory log buffer (last 1000 lines)
+        self.log_buffer = []
+        self.max_log_lines = 1000
+        
+        # Track startup time for relative timestamps
+        self.startup_time = time.time()
+    
+    def log(self, message):
+        """Add message to log buffer with elapsed time since startup."""
+        elapsed = time.time() - self.startup_time
+        hours = int(elapsed // 3600)
+        minutes = int((elapsed % 3600) // 60)
+        seconds = int(elapsed % 60)
+        log_entry = "[{:02d}:{:02d}:{:02d}] {}".format(hours, minutes, seconds, message)
+        self.log_buffer.append(log_entry)
+        if len(self.log_buffer) > self.max_log_lines:
+            self.log_buffer.pop(0)
+        logging.info(message)
 
     def __del__(self):
         self.wifi.disconnect()
@@ -52,8 +71,9 @@ class AP_IF_Wifi:
 
             if self.wifi.active():
                 self.ip_address = self.wifi.ifconfig()[0]
-                logging.info(f'Display wifi is active, IP={self.ip_address}')
+                self.log(f'WiFi AP active, IP={self.ip_address}')
             else:
+                self.log("Failed to activate WiFi AP")
                 logging.error("Failed to activate WiFi AP")
         except Exception as e:
             logging.error(f"Exception occurred while starting WiFi: {e}")
@@ -61,15 +81,17 @@ class AP_IF_Wifi:
     
     def _queue_processor_thread(self):
         """Background thread to process stepper command queue."""
-        logging.info("Queue processor thread started")
+        self.log("Queue processor thread started")
         while self.queue_processing:
             # Execute queue continuously without frequent checks
             if self.stepper.queue_length() > 0 and not self.stepper.is_executing_now():
-                logging.info(f"Processing queue with {self.stepper.queue_length()} commands")
+                self.log(f"Processing queue with {self.stepper.queue_length()} commands")
                 # Process all queued commands
                 self.stepper.execute_all_queued()
+                # Show step count after commands complete
+                self.log(f"Commands completed. Total steps: {self.stepper.get_step_count()}")
             time.sleep(1.0)  # Sleep longer between queue checks
-        logging.info("Queue processor thread stopped")
+        self.log("Queue processor thread stopped")
     
     def start_queue_processor(self):
         """Start the background queue processing thread."""
@@ -114,7 +136,7 @@ class AP_IF_Wifi:
         
         @app.post('/stepper/move')
         async def stepper_move(request):
-            logging.info('Received stepper motor move command')
+            self.log('Received stepper motor move command')
             try:
                 form = request.body.decode('utf-8')
                 data = ujson.loads(form)
@@ -122,7 +144,7 @@ class AP_IF_Wifi:
                 direction = data.get('direction', 1)
                 delay = data.get('delay', None)
                 
-                logging.info(f'Queueing stepper: steps={steps}, direction={direction}')
+                self.log(f'Queueing: {steps} steps {"forward" if direction == 1 else "backward"}')
                 
                 # Queue the motor command instead of executing directly
                 success = self.stepper.queue_step(steps, direction, delay)
@@ -146,24 +168,23 @@ class AP_IF_Wifi:
                     'message': str(e)
                 }), 500, {'Content-Type': 'application/json'}
 
-        # Status endpoint temporarily disabled for testing
-        # @app.get('/stepper/status')
-        # async def stepper_status(request):
-        #     try:
-        #         current_status = {
-        #             'queue_length': self.stepper.queue_length(),
-        #             'is_executing': self.stepper.is_executing_now(),
-        #             'total_steps': self.stepper.get_step_count()
-        #         }
-        #         response_data = {'status': 'success'}
-        #         response_data.update(current_status)
-        #         return ujson.dumps(response_data), 200, {'Content-Type': 'application/json'}
-        #     except Exception as e:
-        #         logging.error(f"Error getting stepper status: {e}")
-        #         return ujson.dumps({
-        #             'status': 'error',
-        #             'message': str(e)
-        #         }), 500, {'Content-Type': 'application/json'}
+        @app.get('/stepper/status')
+        async def stepper_status(request):
+            try:
+                current_status = {
+                    'queue_length': self.stepper.queue_length(),
+                    'is_executing': self.stepper.is_executing_now(),
+                    'total_steps': self.stepper.get_step_count()
+                }
+                response_data = {'status': 'success'}
+                response_data.update(current_status)
+                return ujson.dumps(response_data), 200, {'Content-Type': 'application/json'}
+            except Exception as e:
+                logging.error(f"Error getting stepper status: {e}")
+                return ujson.dumps({
+                    'status': 'error',
+                    'message': str(e)
+                }), 500, {'Content-Type': 'application/json'}
         
         @app.post('/stepper/clear')
         async def stepper_clear(request):
@@ -196,6 +217,21 @@ class AP_IF_Wifi:
                     'status': 'error',
                     'message': str(e)
                 }), 500, {'Content-Type': 'application/json'}
+        
+        @app.get('/logs')
+        async def get_logs(request):
+            """Return log buffer as downloadable text file."""
+            try:
+                log_content = "\n".join(self.log_buffer)
+                if not log_content:
+                    log_content = "No logs available"
+                return log_content, 200, {
+                    'Content-Type': 'text/plain',
+                    'Content-Disposition': 'attachment; filename="microcontroller_log.txt"'
+                }
+            except Exception as e:
+                logging.error(f"Error retrieving logs: {e}")
+                return f"Error: {e}", 500, {'Content-Type': 'text/plain'}
 
         @app.get('/shutdown')
         async def shutdown(request):

@@ -71,39 +71,12 @@
             .btn-forward:active {
                 background-color: #2e7d32;
             }
-            .btn-reset {
-                background-color: #ff9800;
+            .btn-secondary {
+                background-color: #2196F3;
                 color: white;
             }
-            .btn-reset:hover {
-                background-color: #f57c00;
-            }
-            .btn-reset:active {
-                background-color: #e65100;
-            }
-            .info-panel {
-                margin-top: 20px;
-                padding: 15px;
-                background-color: #e3f2fd;
-                border-radius: 5px;
-                border-left: 4px solid #2196F3;
-            }
-            .info-item {
-                display: flex;
-                justify-content: space-between;
-                margin-bottom: 10px;
-                font-size: 16px;
-            }
-            .info-item:last-child {
-                margin-bottom: 0;
-            }
-            .info-label {
-                font-weight: bold;
-                color: #555;
-            }
-            .info-value {
-                color: #2196F3;
-                font-weight: bold;
+            .btn-secondary:hover {
+                background-color: #1976D2;
             }
             .status {
                 margin-top: 20px;
@@ -148,30 +121,19 @@
             </div>
             
             <div id="status" class="status"></div>
-        </div>
-        
-        <div class="info-panel">
-            <div class="info-item">
-                <span class="info-label">Total Steps:</span>
-                <span class="info-value" id="totalSteps">0</span>
-            </div>
-            <div class="info-item">
-                <span class="info-label">Queue Length:</span>
-                <span class="info-value" id="queueLength">0</span>
-            </div>
-            <div class="info-item">
-                <span class="info-label">Status:</span>
-                <span class="info-value" id="executionStatus">Idle</span>
-            </div>
-            <div class="button-group" style="margin-top: 15px;">
-                <button class="btn-reset" onclick="resetCounter()">
-                    Reset Counter
+            
+            <div class="button-group" style="margin-top: 20px;">
+                <button class="btn-secondary" onclick="downloadLogs()">
+                    Download Logs
                 </button>
             </div>
         </div>
         
         <script>
+            console.log('Stepper control script loaded');
+            
             async function moveMotor(direction) {
+                console.log('moveMotor called with direction:', direction);
                 const steps = document.getElementById('steps').value;
                 const statusDiv = document.getElementById('status');
                 
@@ -205,40 +167,8 @@
                 }
             }
             
-            // Status updates temporarily disabled
-            // async function updateStatus() {
-            //     try {
-            //         const response = await fetch('/stepper/status');
-            //         if (response.ok) {
-            //             const data = await response.json();
-            //             document.getElementById('totalSteps').textContent = data.total_steps || 0;
-            //             document.getElementById('queueLength').textContent = data.queue_length || 0;
-            //             document.getElementById('executionStatus').textContent = 
-            //                 data.is_executing ? 'Executing' : 'Idle';
-            //         }
-            //     } catch (error) {
-            //         console.error('Error fetching status:', error);
-            //     }
-            // }
-            
-            async function resetCounter() {
-                const statusDiv = document.getElementById('status');
-                showStatus('Resetting step counter...', false);
-                
-                try {
-                    const response = await fetch('/stepper/reset_counter', {
-                        method: 'POST'
-                    });
-                    
-                    if (response.ok) {
-                        const result = await response.json();
-                        showStatus(result.message || 'Counter reset successfully', false);
-                    } else {
-                        showStatus('Error resetting counter', true);
-                    }
-                } catch (error) {
-                    showStatus('Error: ' + error.message, true);
-                }
+            function downloadLogs() {
+                window.location.href = '/logs';
             }
             
             function showStatus(message, isError) {
@@ -259,9 +189,13 @@
                 }
             });
             
-            // Periodic status updates disabled for testing
+            // Status updates disabled for testing
             // updateStatus();
-            // setInterval(updateStatus, 1000);
+            // setInterval(() => {
+            //     if (!isExecuting) {
+            //         updateStatus();
+            //     }
+            // }, 500);
         </script>
     </body>
 </html>
