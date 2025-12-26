@@ -3,13 +3,11 @@ from machine import Pin, PWM
 
 PWM_PIN = 5
 MAX_SPEED = 100  # percent
-MIN_SPEED = 0   # percent
+MIN_SPEED = 10   # percent
 
 class SpindleMotor:
-    def __init__(self, pin, freq=60):  # low frequency
-        self.pwm = PWM(Pin(pin))
-        self.pwm.freq(freq)
-        self.pwm.duty_u16(0)  # Start with 0% duty cycle
+    def __init__(self, pin, freq=60):  # 60Hz is a safe frequency for ESP32-S2
+        self.pwm = PWM(Pin(pin), freq=freq, duty_u16=0)
         self.current = 0
         self.target = 0
         self.ramp_rate = self.set_ramp_rate(10)  # default ramp rate
@@ -37,6 +35,7 @@ class SpindleMotor:
             await asyncio.sleep_ms(200)
 
 async def main():
+    spindle = None
     try:
         spindle = SpindleMotor(pin=PWM_PIN)  # your MOSFET gate pin
         asyncio.create_task(spindle.run())
@@ -53,7 +52,8 @@ async def main():
     except KeyboardInterrupt:
         print("Stopping spindle motor and cleaning up")
     finally:
-        spindle.pwm.duty_u16(0)
+        if spindle is not None:
+            spindle.pwm.duty_u16(0)
 
 if __name__ == "__main__":
     asyncio.run(main())
