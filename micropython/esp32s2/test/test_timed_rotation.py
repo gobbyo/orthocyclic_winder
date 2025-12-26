@@ -3,7 +3,7 @@ Simple Stepper Motor Queue Test
 Tests stepper motor with queued commands and no delay.
 """
 
-from stepper_motor import StepperMotor28BYJ48
+from micropython.esp32s2.stepper_motor import StepperMotor28BYJ48
 import time
 import _thread
 

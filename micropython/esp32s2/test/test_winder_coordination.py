@@ -4,7 +4,7 @@ Simulates coordinated winder motor and stepper motor operation for first layer w
 Automatically calculates maximum safe winder RPM based on stepper motor limitations.
 """
 
-from stepper_motor import StepperMotor28BYJ48
+from micropython.esp32s2.stepper_motor import StepperMotor28BYJ48
 import time
 import _thread
 
