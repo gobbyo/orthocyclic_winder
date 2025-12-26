@@ -1,0 +1,23 @@
+{
+    "winder": {
+        "slots_per_rev": 16,
+        "lead_screw_pitch_mm": 1.25,
+        "steps_per_rev": 4096,
+        "min_step_delay_ms": 1.0,
+        "bobbin_length_mm": 10.0,
+        "num_layers": 2,
+        "ramp_start_rpm": 5.0,
+        "ramp_duration_s": 10.0,
+        "ramp_down_wires": 3,
+        "ramp_end_rpm": 5.0,
+        "ramp_down_duration_s": 10.0
+    },
+    "wire_types": {
+        "AWG_20": {
+            "diameter_mm": 0.812
+        },
+        "AWG_22": {
+            "diameter_mm": 0.644
+        }
+    }
+}

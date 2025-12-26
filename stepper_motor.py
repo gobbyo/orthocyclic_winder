@@ -20,7 +20,8 @@ class StepperMotor28BYJ48:
         [1, 0, 0, 1]
     ]
     
-    STEPS_PER_REV = 2048  # With gear reduction (64 * 32 = 2048)
+    STEPS_PER_REV = 4096  # With gear reduction and 8-step sequence
+    MIN_DELAY_S = 0.00125  # Minimum delay between steps for this motor (1.25ms)  
     
     def __init__(self, in1_pin, in2_pin, in3_pin, in4_pin, logger=None):
         """
@@ -41,7 +42,7 @@ class StepperMotor28BYJ48:
         self.sequence = self.FULL_STEP_SEQUENCE
             
         self.current_step = 0
-        self.step_delay = 0.002  # Default delay between steps (2ms)
+        self.step_delay = self.MIN_DELAY_S  # Default delay between steps (1.25ms)
         
         # Command queue
         self.command_queue = deque((), 100)  # Max 100 commands in queue
@@ -214,3 +215,72 @@ class StepperMotor28BYJ48:
     def reset_step_count(self):
         """Reset the step counter to zero."""
         self.total_steps = 0
+
+
+# Simple test function
+def test_stepper_motor():
+    """
+    Simple test to verify stepper motor functionality.
+    Tests forward rotation, backward rotation, and queued commands.
+    """
+    print("\n" + "="*60)
+    print("STEPPER MOTOR TEST")
+    print("="*60)
+    
+    # Initialize motor
+    print("\nInitializing stepper motor on pins 2, 3, 4, 5...")
+    motor = StepperMotor28BYJ48(
+        in1_pin=2,
+        in2_pin=3,
+        in3_pin=4,
+        in4_pin=5
+    )
+    
+    try:
+        # Test 1: Forward rotation
+        print("\n--- Test 1: Forward Rotation, half turn ---")
+        motor.step(int(StepperMotor28BYJ48.STEPS_PER_REV/2), direction=1, delay=0.002)
+        print(f"Total steps: {motor.get_step_count()}")
+        time.sleep(1)
+        
+        # Test 2: Backward rotation
+        print("\n--- Test 2: Backward Rotation, half turn ---")
+        motor.step(int(StepperMotor28BYJ48.STEPS_PER_REV/2), direction=-1, delay=0.002)
+        print(f"Total steps: {motor.get_step_count()}")
+        time.sleep(1)
+        
+        # Test 3: Full rotation
+        print("\n--- Test 3: Full Rotation ---")
+        motor.step(StepperMotor28BYJ48.STEPS_PER_REV, direction=1, delay=0.001)
+        print(f"Total steps: {motor.get_step_count()}")
+        time.sleep(1)
+        
+        # Test 4: Queue commands
+        print("\n--- Test 4: Queued Commands, half rotations ---")
+        print("Queueing 3 commands...")
+        motor.queue_step(int(StepperMotor28BYJ48.STEPS_PER_REV/2), direction=1, delay=0.002)
+        motor.queue_step(int(StepperMotor28BYJ48.STEPS_PER_REV/2), direction=-1, delay=0.002)
+        motor.queue_step(int(StepperMotor28BYJ48.STEPS_PER_REV/2), direction=1, delay=0.002)
+        print(f"Queue length: {motor.queue_length()}")
+        
+        print("Executing queued commands...")
+        motor.execute_all_queued()
+        print(f"Total steps: {motor.get_step_count()}")
+        print(f"Queue length: {motor.queue_length()}")
+        
+        print("\n" + "="*60)
+        print("TEST COMPLETE - All tests passed!")
+        print("="*60)
+        
+    except KeyboardInterrupt:
+        print("\n\nTest interrupted by user")
+    except Exception as e:
+        print(f"\n\nTest failed with error: {e}")
+    finally:
+        # Always release motor coils when done
+        motor.release()
+        print("\nMotor coils released")
+
+
+if __name__ == "__main__":
+    test_stepper_motor()
