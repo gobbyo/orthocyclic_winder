@@ -1,6 +1,6 @@
 {
     "winder": {
-        "slots_per_rev": 16,
+        "slots_per_rev": 20,
         "lead_screw_pitch_mm": 1.25,
         "steps_per_rev": 4096,
         "min_step_delay_ms": 1.0,

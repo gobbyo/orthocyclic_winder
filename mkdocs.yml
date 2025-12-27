@@ -1,1 +1,10 @@
-site_name: My Docs
+site_name: Ortho Cyclic Winder
+site_author: gobbyo
+docs_dir: docs
+repo_name: Orthocyclic Winder
+repo_url: https://github.com/gobbyo/orthocyclic_winder
+theme:
+  name: mkdocs
+nav:
+  - Introduction: intro.md
+  - Calculations: calculations.md
