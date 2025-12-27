@@ -32,7 +32,7 @@ Cons:
 
 ## Why Ortho Cyclic Winders Are Specialized And May Be Expensive
 
-Ortho Cyclic winding is not just “better winding”—it’s a precision manufacturing process. The cost comes from the engineering required to maintain perfect geometry over hundreds or thousands of turns.
+Ortho cyclic winding is not just “better winding”—it’s a precision manufacturing process. The cost comes from the engineering required to maintain perfect geometry over hundreds or thousands of turns.
 
 1. **High‑precision mechanical systems**
 
@@ -53,7 +53,7 @@ Ortho Cyclic winding is not just “better winding”—it’s a precision manuf
 
 1. **Low production volume**
 
-      - Ortho Cyclic winders are niche equipment.
+      - Ortho cyclic winders are niche equipment.
       - Low demand with high per‑unit cost.
 
 1. **Skilled setup and operation**
