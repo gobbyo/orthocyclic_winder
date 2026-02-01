@@ -24,4 +24,6 @@ Cons:
 
 ## Why Do-It-Yourself (DIY) Ortho Cyclic Winding Is Hard (but not impossible)
 
-Producing true orthocyclic layers demands accurate phase‑locked traverse motion, consistent tension, and a flawless first layer. Mechanical precision—zero backlash, smooth stepper motion, and reliable encoder feedback—is essential to keep each turn aligned and each layer nested correctly.
+Producing true orthocyclic layers demands accurate phase‑locked traverse motion, consistent tension, and a flawless first layer. Mechanical precision—zero backlash, smooth stepper motion, and reliable encoder feedback—is essential to keep each turn aligned and each layer nested correctly. 
+
+The design of the orthocyclic winder achieves all of these goals, but is limited to AWG 20 wire and higher (smaller diameter wire).
