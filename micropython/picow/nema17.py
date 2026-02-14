@@ -1,14 +1,10 @@
 from machine import Pin
 import uasyncio as asyncio
 
-# Define pin numbers for stepper motor control
-STEPPER_DIR_PIN = 0
-STEPPER_STEP_PIN = 1
-STEPPER_EN_PIN = 2
-STEPPER_ENABLE_IS_ACTIVE_LOW = True
-DIR_SETUP_MS = 5
 CLOCKWISE = 1
 COUNTERCLOCKWISE = -1
+STEPPER_ENABLE_IS_ACTIVE_LOW = True
+DIR_SETUP_MS = 5
 
 class NEMA17Stepper:
     def __init__(self, dir_pin, step_pin, en_pin):
@@ -55,7 +51,12 @@ class NEMA17Stepper:
             self.step.value(0)
             #await asyncio.sleep_ms(delay_ms)
 
-async def test_nema17_stepper():
+def test_nema17_stepper():
+    # Define pin numbers for stepper motor control
+    STEPPER_DIR_PIN = 0
+    STEPPER_STEP_PIN = 1
+    STEPPER_EN_PIN = 2
+
     print("\n" + "="*60)
     print("NEMA17 STEPPER MOTOR TEST")
     print("="*60)
@@ -94,7 +95,5 @@ async def test_nema17_stepper():
         print("Disabling motor...")
         motor.enabled = False
 
-def main():
+if __name__ == "__main__":
     asyncio.run(test_nema17_stepper())
-
-main()
