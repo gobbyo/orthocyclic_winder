@@ -16,8 +16,8 @@ from nema17 import NEMA17Stepper
 # Brushed motor (spindle) configuration
 BJT_GATE_PIN = 4
 PWM_FREQUENCY = 60
-MOTOR_RUN_PWM_PERCENT = 8.25
-RUN_DURATION_MS = 30000
+MOTOR_RUN_PWM_PERCENT = 8
+TARGET_ENCODER_ROTATIONS = 350
 MAX_DUTY = 65535
 
 # Encoder configuration
@@ -25,6 +25,7 @@ IR_SENSOR_ENCODER_PIN = 17
 ENCODER_ACTIVE_LEVEL = 0
 ENCODER_DEBOUNCE_MS = 3
 ENCODER_SLOTS_PER_REV = 20
+TARGET_ENCODER_SLOTS = TARGET_ENCODER_ROTATIONS * ENCODER_SLOTS_PER_REV
 
 # Traversal stepper configuration
 STEPPER_DIR_PIN = 0
@@ -53,7 +54,7 @@ async def motor_and_traversal_test():
     motor_pwm.freq(PWM_FREQUENCY)
 
     stepper = NEMA17Stepper(STEPPER_DIR_PIN, STEPPER_STEP_PIN, STEPPER_EN_PIN)
-    stepper.direction = CLOCKWISE
+    stepper.direction = COUNTERCLOCKWISE
     stepper.enabled = False
 
     ir_sensor_inside = Pin(IR_SENSOR_INSIDE_PIN, Pin.IN)
@@ -123,15 +124,17 @@ async def motor_and_traversal_test():
         print(f"Encoder Pin: GPIO{IR_SENSOR_ENCODER_PIN}")
         print(f"Stepper per slot: {STEPS_PER_ENCODER_SLOT} steps")
         print(f"Motor PWM: {MOTOR_RUN_PWM_PERCENT}% (constant)")
-        print(f"Run duration: {RUN_DURATION_MS} ms")
+        print(f"Target encoder rotations: {TARGET_ENCODER_ROTATIONS}")
 
         duty_value = MAX_DUTY - int((MOTOR_RUN_PWM_PERCENT / 100) * MAX_DUTY)
         motor_pwm.duty_u16(duty_value)
-        await asyncio.sleep_ms(RUN_DURATION_MS)
+
+        while encoder_slot_count < TARGET_ENCODER_SLOTS:
+            await asyncio.sleep_ms(5)
 
         motor_pwm.duty_u16(MAX_DUTY)
         running = False
-        print("Constant-speed run complete, motor stopping.")
+        print("Target encoder rotations reached, motor stopping.")
 
     irq_trigger = Pin.IRQ_FALLING | Pin.IRQ_RISING
     encoder_pin.irq(trigger=irq_trigger, handler=encoder_irq)
