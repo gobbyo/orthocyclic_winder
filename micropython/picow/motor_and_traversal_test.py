@@ -1,0 +1,193 @@
+"""
+Combined motor + traversal guide test.
+
+- Runs brushed motor PWM ramp up/down (same profile as motor_async_test).
+- Counts encoder slots from IR sensor.
+- Moves traversal NEMA17 stepper 10 steps for every encoder slot.
+- Uses inside/outside traversal IR sensors to reverse direction at limits.
+"""
+
+from machine import Pin, PWM
+import uasyncio as asyncio
+import time
+
+from nema17 import NEMA17Stepper
+
+# Brushed motor (spindle) configuration
+BJT_GATE_PIN = 4
+PWM_FREQUENCY = 60
+MOTOR_RUN_PWM_PERCENT = 8.25
+RUN_DURATION_MS = 30000
+MAX_DUTY = 65535
+
+# Encoder configuration
+IR_SENSOR_ENCODER_PIN = 17
+ENCODER_ACTIVE_LEVEL = 0
+ENCODER_DEBOUNCE_MS = 3
+ENCODER_SLOTS_PER_REV = 20
+
+# Traversal stepper configuration
+STEPPER_DIR_PIN = 0
+STEPPER_STEP_PIN = 1
+STEPPER_EN_PIN = 2
+CLOCKWISE = 1
+COUNTERCLOCKWISE = -1
+STEPPER_STEPS_PER_REV = 200
+STEPS_PER_ENCODER_SLOT = STEPPER_STEPS_PER_REV // ENCODER_SLOTS_PER_REV
+STEPPER_DELAY_MS = 2
+
+# Traversal limit sensor pins (active low)
+IR_SENSOR_INSIDE_PIN = 18
+IR_SENSOR_OUTSIDE_PIN = 19
+
+
+def emergency_stop_encoder_motor():
+    motor_pwm = PWM(Pin(BJT_GATE_PIN))
+    motor_pwm.freq(PWM_FREQUENCY)
+    motor_pwm.duty_u16(MAX_DUTY)
+    motor_pwm.deinit()
+
+
+async def motor_and_traversal_test():
+    motor_pwm = PWM(Pin(BJT_GATE_PIN))
+    motor_pwm.freq(PWM_FREQUENCY)
+
+    stepper = NEMA17Stepper(STEPPER_DIR_PIN, STEPPER_STEP_PIN, STEPPER_EN_PIN)
+    stepper.direction = CLOCKWISE
+    stepper.enabled = False
+
+    ir_sensor_inside = Pin(IR_SENSOR_INSIDE_PIN, Pin.IN)
+    ir_sensor_outside = Pin(IR_SENSOR_OUTSIDE_PIN, Pin.IN)
+
+    encoder_pin = Pin(IR_SENSOR_ENCODER_PIN, Pin.IN, Pin.PULL_UP)
+
+    encoder_slot_count = 0
+    traversal_slots_processed = 0
+    stepper_steps_moved = 0
+    last_encoder_edge_ms = time.ticks_ms()
+    encoder_in_gap = (encoder_pin.value() == ENCODER_ACTIVE_LEVEL)
+    running = True
+
+    def encoder_irq(pin):
+        nonlocal encoder_slot_count, last_encoder_edge_ms, encoder_in_gap
+
+        now_ms = time.ticks_ms()
+        if time.ticks_diff(now_ms, last_encoder_edge_ms) < ENCODER_DEBOUNCE_MS:
+            return
+        last_encoder_edge_ms = now_ms
+
+        sensor_value = pin.value()
+        if sensor_value == ENCODER_ACTIVE_LEVEL:
+            if not encoder_in_gap:
+                encoder_in_gap = True
+                encoder_slot_count += 1
+        else:
+            encoder_in_gap = False
+
+    async def report_revolutions():
+        last_reported_revs = 0
+        while running:
+            revolutions = encoder_slot_count // ENCODER_SLOTS_PER_REV
+            while last_reported_revs < revolutions:
+                last_reported_revs += 1
+                print(f"Revolutions: {last_reported_revs}")
+            await asyncio.sleep_ms(5)
+
+    async def drive_traversal_from_encoder():
+        nonlocal traversal_slots_processed, stepper_steps_moved
+
+        while running:
+            pending_slots = encoder_slot_count - traversal_slots_processed
+            if pending_slots <= 0:
+                await asyncio.sleep_ms(2)
+                continue
+
+            inside_triggered = ir_sensor_inside.value() == 0
+            outside_triggered = ir_sensor_outside.value() == 0
+
+            if inside_triggered and not outside_triggered:
+                stepper.direction = CLOCKWISE
+            elif outside_triggered and not inside_triggered:
+                stepper.direction = COUNTERCLOCKWISE
+
+            stepper.enabled = True
+            await stepper.step_motor(STEPS_PER_ENCODER_SLOT, STEPPER_DELAY_MS)
+            stepper.enabled = False
+            traversal_slots_processed += 1
+            stepper_steps_moved += STEPS_PER_ENCODER_SLOT
+
+    async def run_motor_constant_profile():
+        nonlocal running
+        print("Starting combined motor + traversal test")
+        print(f"PWM Frequency: {PWM_FREQUENCY}Hz")
+        print(f"Encoder Pin: GPIO{IR_SENSOR_ENCODER_PIN}")
+        print(f"Stepper per slot: {STEPS_PER_ENCODER_SLOT} steps")
+        print(f"Motor PWM: {MOTOR_RUN_PWM_PERCENT}% (constant)")
+        print(f"Run duration: {RUN_DURATION_MS} ms")
+
+        duty_value = MAX_DUTY - int((MOTOR_RUN_PWM_PERCENT / 100) * MAX_DUTY)
+        motor_pwm.duty_u16(duty_value)
+        await asyncio.sleep_ms(RUN_DURATION_MS)
+
+        motor_pwm.duty_u16(MAX_DUTY)
+        running = False
+        print("Constant-speed run complete, motor stopping.")
+
+    irq_trigger = Pin.IRQ_FALLING | Pin.IRQ_RISING
+    encoder_pin.irq(trigger=irq_trigger, handler=encoder_irq)
+
+    rev_task = asyncio.create_task(report_revolutions())
+    traversal_task = asyncio.create_task(drive_traversal_from_encoder())
+
+    try:
+        await run_motor_constant_profile()
+    except Exception as exc:
+        print(f"Error during test: {exc}")
+    finally:
+        running = False
+        encoder_pin.irq(handler=None)
+
+        try:
+            await traversal_task
+        except Exception:
+            pass
+
+        rev_task.cancel()
+        try:
+            await rev_task
+        except asyncio.CancelledError:
+            pass
+
+        motor_pwm.duty_u16(MAX_DUTY)
+        motor_pwm.deinit()
+        stepper.enabled = False
+
+        expected_steps = encoder_slot_count * STEPS_PER_ENCODER_SLOT
+        step_difference = expected_steps - stepper_steps_moved
+        pending_slots = encoder_slot_count - traversal_slots_processed
+        motor_encoder_revolutions = encoder_slot_count / ENCODER_SLOTS_PER_REV
+        stepper_revolutions = stepper_steps_moved / STEPPER_STEPS_PER_REV
+        revolution_difference = motor_encoder_revolutions - stepper_revolutions
+        print(f"Final encoder slot count: {encoder_slot_count}")
+        print(f"Final traversal step count: {stepper_steps_moved}")
+        print(f"Expected traversal step count: {expected_steps}")
+        print(f"Expected minus actual step difference: {step_difference}")
+        print(f"Motor encoder revolutions: {motor_encoder_revolutions:.3f}")
+        print(f"Stepper revolutions: {stepper_revolutions:.3f}")
+        print(f"Motor minus stepper revolution difference: {revolution_difference:.3f}")
+        print(f"Final pending slot count: {pending_slots}")
+        print("Combined test finished.")
+
+
+def run_test():
+    try:
+        asyncio.run(motor_and_traversal_test())
+    except KeyboardInterrupt:
+        emergency_stop_encoder_motor()
+        print("\nTest interrupted by user")
+    finally:
+        emergency_stop_encoder_motor()
+
+
+if __name__ == "__main__":
+    run_test()

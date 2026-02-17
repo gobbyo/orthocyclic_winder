@@ -49,9 +49,8 @@ class NEMA17Stepper:
             self.step.value(1)
             await asyncio.sleep_ms(delay_ms)
             self.step.value(0)
-            #await asyncio.sleep_ms(delay_ms)
 
-def test_nema17_stepper():
+async def test_nema17_stepper():
     # Define pin numbers for stepper motor control
     STEPPER_DIR_PIN = 0
     STEPPER_STEP_PIN = 1
@@ -69,21 +68,25 @@ def test_nema17_stepper():
         en_pin=STEPPER_EN_PIN
     )
 
-    # Enable the motor
-    print("Enabling motor...")
-    motor.enabled = True
-
     TOTAL_REVS = 25
     STEPS_PER_REV = 200
     DELAY_MS = 2  # Delay between steps in milliseconds
 
     try:
-        
+        print("Enabling motor...")
+        motor.enabled = True
         motor.direction = CLOCKWISE
         print(f"\nRotating clockwise for {TOTAL_REVS} revolution(s)...")
         await motor.step_motor(TOTAL_REVS * STEPS_PER_REV, DELAY_MS)
+        
+        print("Disabling motor...")
+        motor.enabled = False
         await asyncio.sleep_ms(1000)
         motor.direction = COUNTERCLOCKWISE
+
+        print(f"\nRotating counterclockwise for {TOTAL_REVS} revolution(s)...")
+        print("Enabling motor...")
+        motor.enabled = True
         await motor.step_motor(TOTAL_REVS * STEPS_PER_REV, DELAY_MS)
 
         print("\nTest completed successfully.")

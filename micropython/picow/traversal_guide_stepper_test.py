@@ -10,20 +10,18 @@ DIR_SETUP_MS = 5
 CLOCKWISE = 1
 COUNTERCLOCKWISE = -1
 TOTAL_REVS = 1
-STEPS_PER_REV = 10
+STEPS_PER_REV = 200
 DELAY_MS = 2  # Delay between steps in milliseconds
 
 # IR sensor pins
 IR_SENSOR_INSIDE_PIN = 18
 IR_SENSOR_OUTSIDE_PIN = 19
-IR_SENSOR_ENCODER_PIN = 20
 
 # Create stepper motor instance
 stepper = NEMA17Stepper(STEPPER_DIR_PIN, STEPPER_STEP_PIN, STEPPER_EN_PIN)    
 # Create IR sensor pins
 ir_sensor_inside = Pin(IR_SENSOR_INSIDE_PIN, Pin.IN)
 ir_sensor_outside = Pin(IR_SENSOR_OUTSIDE_PIN, Pin.IN)
-ir_sensor_encoder = Pin(IR_SENSOR_ENCODER_PIN, Pin.IN)
 
 async def stepper_control():
     inside_triggered = ir_sensor_inside.value() == 0
@@ -41,7 +39,7 @@ async def stepper_control():
             stepper.enabled = True
             await stepper.step_motor(TOTAL_REVS * STEPS_PER_REV, DELAY_MS)
             stepper.enabled = False
-            inside_triggered = ir_sensor_inside.value() == 0  # Assuming active low
+            inside_triggered = ir_sensor_inside.value() == 0  # Active low
             revs += 1
 
     await asyncio.sleep(2)
@@ -50,8 +48,8 @@ async def stepper_control():
     
     while True:
         # Check IR sensor states
-        inside_triggered = ir_sensor_inside.value() == 0  # Assuming active low
-        outside_triggered = ir_sensor_outside.value() == 0  # Assuming active low
+        inside_triggered = ir_sensor_inside.value() == 0  # Active low
+        outside_triggered = ir_sensor_outside.value() == 0  # Active low
         
         if inside_triggered and not outside_triggered:
             print("Inside sensor triggered, moving clockwise")
