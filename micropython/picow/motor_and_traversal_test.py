@@ -16,8 +16,8 @@ from nema17 import NEMA17Stepper
 # Brushed motor (spindle) configuration
 BJT_GATE_PIN = 4
 PWM_FREQUENCY = 60
-MOTOR_RUN_PWM_PERCENT = 8
-TARGET_ENCODER_ROTATIONS = 350
+MOTOR_RUN_PWM_PERCENT = 7.8
+TARGET_ENCODER_ROTATIONS = 150
 MAX_DUTY = 65535
 
 # Encoder configuration
