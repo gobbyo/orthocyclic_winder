@@ -1,7 +1,7 @@
 """
 Combined motor + traversal guide test.
 
-- Runs brushed motor PWM ramp up/down (same profile as motor_async_test).
+- Runs brushed motor at target encoder speed (cycles/min).
 - Counts encoder slots from IR sensor.
 - Moves traversal NEMA17 stepper 10 steps for every encoder slot.
 - Uses inside/outside traversal IR sensors to reverse direction at limits.
@@ -16,8 +16,13 @@ from nema17 import NEMA17Stepper
 # Brushed motor (spindle) configuration
 BJT_GATE_PIN = 4
 PWM_FREQUENCY = 60
-MOTOR_RUN_PWM_PERCENT = 7.8
-TARGET_ENCODER_ROTATIONS = 150
+TARGET_ENCODER_SPEED_CPM = 80
+MOTOR_PWM_START_PERCENT = 8.0
+MOTOR_PWM_MIN_PERCENT = 0.0
+MOTOR_PWM_MAX_PERCENT = 70.0
+SPEED_CONTROL_INTERVAL_MS = 200
+SPEED_CONTROL_KP_PERCENT_PER_CPM = 0.05
+TARGET_ENCODER_ROTATIONS = 50
 MAX_DUTY = 65535
 
 # Encoder configuration
@@ -68,9 +73,19 @@ async def motor_and_traversal_test():
     last_encoder_edge_ms = time.ticks_ms()
     encoder_in_gap = (encoder_pin.value() == ENCODER_ACTIVE_LEVEL)
     running = True
+    stop_requested = False
+
+    def duty_from_percent(pwm_percent):
+        clamped = max(MOTOR_PWM_MIN_PERCENT, min(MOTOR_PWM_MAX_PERCENT, pwm_percent))
+        return MAX_DUTY - int((clamped / 100) * MAX_DUTY), clamped
+
+    def target_speed_cpm():
+        if TARGET_ENCODER_SPEED_CPM <= 0:
+            raise ValueError("TARGET_ENCODER_SPEED_CPM must be > 0")
+        return TARGET_ENCODER_SPEED_CPM
 
     def encoder_irq(pin):
-        nonlocal encoder_slot_count, last_encoder_edge_ms, encoder_in_gap
+        nonlocal encoder_slot_count, last_encoder_edge_ms, encoder_in_gap, stop_requested
 
         now_ms = time.ticks_ms()
         if time.ticks_diff(now_ms, last_encoder_edge_ms) < ENCODER_DEBOUNCE_MS:
@@ -82,6 +97,8 @@ async def motor_and_traversal_test():
             if not encoder_in_gap:
                 encoder_in_gap = True
                 encoder_slot_count += 1
+                if encoder_slot_count >= TARGET_ENCODER_SLOTS:
+                    stop_requested = True
         else:
             encoder_in_gap = False
 
@@ -117,20 +134,43 @@ async def motor_and_traversal_test():
             traversal_slots_processed += 1
             stepper_steps_moved += STEPS_PER_ENCODER_SLOT
 
-    async def run_motor_constant_profile():
+    async def run_motor_speed_profile():
         nonlocal running
+        target_cpm = target_speed_cpm()
         print("Starting combined motor + traversal test")
         print(f"PWM Frequency: {PWM_FREQUENCY}Hz")
         print(f"Encoder Pin: GPIO{IR_SENSOR_ENCODER_PIN}")
         print(f"Stepper per slot: {STEPS_PER_ENCODER_SLOT} steps")
-        print(f"Motor PWM: {MOTOR_RUN_PWM_PERCENT}% (constant)")
+        print(f"Target encoder speed: {target_cpm:.1f} cpm")
         print(f"Target encoder rotations: {TARGET_ENCODER_ROTATIONS}")
 
-        duty_value = MAX_DUTY - int((MOTOR_RUN_PWM_PERCENT / 100) * MAX_DUTY)
+        pwm_percent = MOTOR_PWM_START_PERCENT
+        duty_value, pwm_percent = duty_from_percent(pwm_percent)
         motor_pwm.duty_u16(duty_value)
 
-        while encoder_slot_count < TARGET_ENCODER_SLOTS:
+        last_slots = encoder_slot_count
+        last_control_ms = time.ticks_ms()
+
+        while not stop_requested:
             await asyncio.sleep_ms(5)
+
+            now_ms = time.ticks_ms()
+            elapsed_ms = time.ticks_diff(now_ms, last_control_ms)
+            if elapsed_ms < SPEED_CONTROL_INTERVAL_MS:
+                continue
+
+            current_slots = encoder_slot_count
+            slot_delta = current_slots - last_slots
+            measured_cps = (slot_delta * 1000.0) / (elapsed_ms * ENCODER_SLOTS_PER_REV)
+            measured_cpm = measured_cps * 60.0
+
+            speed_error_cpm = target_cpm - measured_cpm
+            pwm_percent += speed_error_cpm * SPEED_CONTROL_KP_PERCENT_PER_CPM
+            duty_value, pwm_percent = duty_from_percent(pwm_percent)
+            motor_pwm.duty_u16(duty_value)
+
+            last_slots = current_slots
+            last_control_ms = now_ms
 
         motor_pwm.duty_u16(MAX_DUTY)
         running = False
@@ -143,7 +183,7 @@ async def motor_and_traversal_test():
     traversal_task = asyncio.create_task(drive_traversal_from_encoder())
 
     try:
-        await run_motor_constant_profile()
+        await run_motor_speed_profile()
     except Exception as exc:
         print(f"Error during test: {exc}")
     finally:
