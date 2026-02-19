@@ -1,0 +1,8 @@
+{
+  "total_turns": 200,
+  "spool_width_mm": 15.0,
+  "awg_size": 28,
+  "wire_type": "stranded",
+  "encoder_slots_per_rev": 20,
+  "preview_count": 14
+}

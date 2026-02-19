@@ -16,12 +16,10 @@ from nema17 import NEMA17Stepper
 # Brushed motor (spindle) configuration
 BJT_GATE_PIN = 4
 PWM_FREQUENCY = 60
-TARGET_ENCODER_SPEED_CPM = 80
-MOTOR_PWM_START_PERCENT = 8.0
-MOTOR_PWM_MIN_PERCENT = 0.0
-MOTOR_PWM_MAX_PERCENT = 70.0
+TARGET_ENCODER_SPEED_CPM = 70
+MOTOR_DUTY_START = 60397
 SPEED_CONTROL_INTERVAL_MS = 200
-SPEED_CONTROL_KP_PERCENT_PER_CPM = 0.05
+SPEED_CONTROL_KP_DUTY_PER_CPM = 32.7675
 TARGET_ENCODER_ROTATIONS = 50
 MAX_DUTY = 65535
 
@@ -75,9 +73,8 @@ async def motor_and_traversal_test():
     running = True
     stop_requested = False
 
-    def duty_from_percent(pwm_percent):
-        clamped = max(MOTOR_PWM_MIN_PERCENT, min(MOTOR_PWM_MAX_PERCENT, pwm_percent))
-        return MAX_DUTY - int((clamped / 100) * MAX_DUTY), clamped
+    def clamp_duty_value(duty_value):
+        return max(0, min(MAX_DUTY, int(duty_value)))
 
     def target_speed_cpm():
         if TARGET_ENCODER_SPEED_CPM <= 0:
@@ -144,8 +141,7 @@ async def motor_and_traversal_test():
         print(f"Target encoder speed: {target_cpm:.1f} cpm")
         print(f"Target encoder rotations: {TARGET_ENCODER_ROTATIONS}")
 
-        pwm_percent = MOTOR_PWM_START_PERCENT
-        duty_value, pwm_percent = duty_from_percent(pwm_percent)
+        duty_value = clamp_duty_value(MOTOR_DUTY_START)
         motor_pwm.duty_u16(duty_value)
 
         last_slots = encoder_slot_count
@@ -165,8 +161,8 @@ async def motor_and_traversal_test():
             measured_cpm = measured_cps * 60.0
 
             speed_error_cpm = target_cpm - measured_cpm
-            pwm_percent += speed_error_cpm * SPEED_CONTROL_KP_PERCENT_PER_CPM
-            duty_value, pwm_percent = duty_from_percent(pwm_percent)
+            duty_value -= int(speed_error_cpm * SPEED_CONTROL_KP_DUTY_PER_CPM)
+            duty_value = clamp_duty_value(duty_value)
             motor_pwm.duty_u16(duty_value)
 
             last_slots = current_slots

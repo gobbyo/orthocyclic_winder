@@ -3,6 +3,11 @@ try:
 except ImportError:
     import asyncio
 
+try:
+    import ujson as json
+except ImportError:
+    import json
+
 
 AWG_TABLE = {
     18: {"bare": 1.024, "magnet": 1.06, "stranded": 2.0},
@@ -104,12 +109,32 @@ async def _example_heartbeat(stop_flag):
         await asyncio.sleep_ms(250)
 
 
+def _load_winding_parameters(file_path="winding_coil_parameters.json"):
+    with open(file_path, "r") as file_handle:
+        params = json.load(file_handle)
+
+    required_keys = ("total_turns", "spool_width_mm", "awg_size")
+    missing_keys = [key for key in required_keys if key not in params]
+    if missing_keys:
+        missing_list = ", ".join(missing_keys)
+        raise ValueError(f"Missing required parameter(s): {missing_list}")
+
+    return {
+        "total_turns": int(params["total_turns"]),
+        "spool_width_mm": float(params["spool_width_mm"]),
+        "awg_size": int(params["awg_size"]),
+        "wire_type": params.get("wire_type", "magnet"),
+        "preview_count": int(params.get("preview_count", 14)),
+    }
+
+
 async def _async_example():
-    total_turns = 300
-    spool_width_mm = 20.0
-    awg_size = 20
-    wire_type = "magnet"
-    preview_count = 14
+    params = _load_winding_parameters("winding_coil_parameters.json")
+    total_turns = params["total_turns"]
+    spool_width_mm = params["spool_width_mm"]
+    awg_size = params["awg_size"]
+    wire_type = params["wire_type"]
+    preview_count = params["preview_count"]
 
     stop_flag = [False]
     heartbeat_task = asyncio.create_task(_example_heartbeat(stop_flag))
@@ -119,6 +144,7 @@ async def _async_example():
         summary = winding_plan_summary(total_turns, layers)
 
         print("Async winding plan example")
+        print("Config file: winding_coil_parameters.json")
         print(f"AWG: {awg_size} ({wire_type})")
         print(f"Total turns: {total_turns}")
         print(f"Spool width: {spool_width_mm} mm")
