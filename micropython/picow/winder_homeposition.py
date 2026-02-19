@@ -5,7 +5,13 @@ try:
 except ImportError:
     import asyncio
 
+try:
+    import ujson as json
+except ImportError:
+    import json
+
 from nema17 import NEMA17Stepper
+from windingcalculator import get_awg_diameter
 
 
 # Traversal stepper configuration
@@ -19,9 +25,31 @@ HOMING_REFINE_STEP_DELAY_MS = 2
 HOMING_CHUNK_STEPS = 25
 HOMING_MAX_STEPS = 20000
 HOMING_BACKOFF_STEPS = 200
+STEPPER_STEPS_PER_REV = 200
+TRAVERSAL_LEAD_MM = 1.25
 
 # Traversal limit sensor pins (active low)
 IR_SENSOR_INSIDE_PIN = 18
+
+
+def _steps_per_winder_turn(file_path="winding_coil_parameters.json"):
+    try:
+        with open(file_path, "r") as file_handle:
+            params = json.load(file_handle)
+    except Exception:
+        return None
+
+    try:
+        awg_size = int(params["awg_size"])
+        wire_type = params.get("wire_type", "magnet")
+        wire_diameter_mm = get_awg_diameter(awg_size, wire_type)
+    except Exception:
+        return None
+
+    if wire_diameter_mm <= 0:
+        return None
+
+    return STEPPER_STEPS_PER_REV * (wire_diameter_mm / TRAVERSAL_LEAD_MM)
 
 
 async def home_traversal_guide():
@@ -125,13 +153,31 @@ async def home_traversal_guide():
                     )
                 )
 
-        print(
-            "Traversal homed after {} steps, backoff {} steps, refine {} steps.".format(
-                steps_taken,
-                HOMING_BACKOFF_STEPS,
-                refine_steps_taken,
+        homed_steps = steps_taken - HOMING_BACKOFF_STEPS + refine_steps_taken
+        homing_stepper_revolutions = homed_steps / STEPPER_STEPS_PER_REV
+        steps_per_winder_turn = _steps_per_winder_turn()
+
+        if steps_per_winder_turn:
+            homing_winder_turns = homed_steps / steps_per_winder_turn
+            print(
+                "Traversal homed after {} steps (stepper revs {:.3f}, winding turns {:.3f}), backoff {} steps, refine {} steps.".format(
+                    homed_steps,
+                    homing_stepper_revolutions,
+                    homing_winder_turns,
+                    HOMING_BACKOFF_STEPS,
+                    refine_steps_taken,
+                )
             )
-        )
+        else:
+            print(
+                "Traversal homed after {} steps (stepper revs {:.3f}), backoff {} steps, refine {} steps.".format(
+                    homed_steps,
+                    homing_stepper_revolutions,
+                    HOMING_BACKOFF_STEPS,
+                    refine_steps_taken,
+                )
+            )
+
     finally:
         stepper.enabled = False
 
