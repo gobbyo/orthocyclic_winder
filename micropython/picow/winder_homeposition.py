@@ -1,4 +1,4 @@
-from machine import Pin
+from machine import Pin, PWM
 
 try:
     import uasyncio as asyncio
@@ -28,8 +28,22 @@ HOMING_BACKOFF_STEPS = 200
 STEPPER_STEPS_PER_REV = 200
 TRAVERSAL_LEAD_MM = 1.25
 
+# Brushed motor (encoder motor) configuration
+BJT_GATE_PIN = 4
+PWM_FREQUENCY = 60
+MAX_DUTY = 65535
+
 # Traversal limit sensor pins (active low)
 IR_SENSOR_INSIDE_PIN = 18
+
+
+def emergency_stop_all_motors():
+    motor_pwm = PWM(Pin(BJT_GATE_PIN))
+    motor_pwm.freq(PWM_FREQUENCY)
+    motor_pwm.duty_u16(MAX_DUTY)
+
+    stepper_enable_pin = Pin(STEPPER_EN_PIN, Pin.OUT)
+    stepper_enable_pin.value(1)
 
 
 def _steps_per_winder_turn(file_path="winding_coil_parameters.json"):
@@ -186,7 +200,13 @@ def run_test():
     try:
         asyncio.run(home_traversal_guide())
     except KeyboardInterrupt:
+        emergency_stop_all_motors()
         print("\nHoming interrupted by user")
+    except Exception as exc:
+        emergency_stop_all_motors()
+        print("\nHoming failed: {}".format(exc))
+    finally:
+        emergency_stop_all_motors()
 
 
 if __name__ == "__main__":

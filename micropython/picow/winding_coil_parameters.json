@@ -1,8 +1,8 @@
 {
   "total_turns": 200,
-  "spool_width_mm": 40.0,
-  "awg_size": 20,
-  "wire_type": "stranded",
-  "encoder_slots_per_rev": 20,
+  "spool_width_mm": 20.0,
+  "awg_size": 24,
+  "wire_type": "magnet",
+  "encoder_speed_scale": 0.50,
   "preview_count": 14
 }

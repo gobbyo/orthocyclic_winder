@@ -1,5 +1,6 @@
 from machine import Pin
 import uasyncio as asyncio
+import time
 
 CLOCKWISE = 1
 COUNTERCLOCKWISE = -1
@@ -12,6 +13,7 @@ class NEMA17Stepper:
         self.step = Pin(step_pin, Pin.OUT)
         self.en = Pin(en_pin, Pin.OUT)
         self._enabled = False
+        self._dir_needs_settle = True
         self.enabled = False
 
     @property
@@ -37,18 +39,31 @@ class NEMA17Stepper:
             self.dir.value(0)
         else:
             raise ValueError("direction must be CLOCKWISE or COUNTERCLOCKWISE")
+        self._dir_needs_settle = True
 
     async def step_motor(self, steps, delay_ms):
         if not self.enabled:
             raise Exception("Motor is not enabled")
 
-        self.step.value(0)
-        await asyncio.sleep_ms(DIR_SETUP_MS)
+        if steps <= 0:
+            return
 
-        for _ in range(steps):
+        self.step.value(0)
+
+        if self._dir_needs_settle:
+            await asyncio.sleep_ms(DIR_SETUP_MS)
+            self._dir_needs_settle = False
+
+        half_pulse_delay_us = max(100, int(delay_ms * 500))
+
+        for step_index in range(steps):
             self.step.value(1)
-            await asyncio.sleep_ms(delay_ms)
+            time.sleep_us(half_pulse_delay_us)
             self.step.value(0)
+            time.sleep_us(half_pulse_delay_us)
+
+            if (step_index & 0x1F) == 0x1F:
+                await asyncio.sleep_ms(0)
 
 async def test_nema17_stepper():
     # Define pin numbers for stepper motor control
@@ -76,7 +91,7 @@ async def test_nema17_stepper():
         print("Enabling motor...")
         motor.enabled = True
         motor.direction = CLOCKWISE
-        print(f"\nRotating clockwise for {TOTAL_REVS} revolution(s)...")
+        print("\nRotating clockwise for {} revolution(s)...".format(TOTAL_REVS))
         await motor.step_motor(TOTAL_REVS * STEPS_PER_REV, DELAY_MS)
         
         print("Disabling motor...")
@@ -84,7 +99,7 @@ async def test_nema17_stepper():
         await asyncio.sleep_ms(1000)
         motor.direction = COUNTERCLOCKWISE
 
-        print(f"\nRotating counterclockwise for {TOTAL_REVS} revolution(s)...")
+        print("\nRotating counterclockwise for {} revolution(s)...".format(TOTAL_REVS))
         print("Enabling motor...")
         motor.enabled = True
         await motor.step_motor(TOTAL_REVS * STEPS_PER_REV, DELAY_MS)
