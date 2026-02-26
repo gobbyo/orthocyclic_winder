@@ -150,23 +150,9 @@ async def wind_first_layer():
     if not layers:
         raise ValueError("Winding plan returned no layers")
 
-    first_layer_num, first_layer_turns, first_layer_steps = layers[0]
+    _, first_layer_turns, first_layer_steps = layers[0]
     target_encoder_slots = first_layer_turns * encoder_slots_per_rev
     steps_per_encoder_slot = first_layer_steps / target_encoder_slots
-
-    print("Starting first-layer winding")
-    print("Assuming traversal guide is already at home (inside).")
-    print("Layer {} target: turns={}, steps={}".format(
-        first_layer_num,
-        first_layer_turns,
-        first_layer_steps,
-    ))
-    print("Encoder slots/rev: {}".format(encoder_slots_per_rev))
-    print("Wire diameter (mm): {:.3f}".format(wire_diameter_mm))
-    print("Encoder speed scale: {:.3f}".format(encoder_speed_scale))
-    print("Target encoder speed (cpm): {:.3f}".format(target_encoder_speed_cpm))
-    print("Target encoder slots: {}".format(target_encoder_slots))
-    print("Traversal step target/slot: {:.6f}".format(steps_per_encoder_slot))
 
     motor_pwm = PWM(Pin(BJT_GATE_PIN))
     motor_pwm.freq(PWM_FREQUENCY)
@@ -358,19 +344,6 @@ async def wind_first_layer():
 
         if traversal_exception is not None:
             raise traversal_exception
-
-    actual_turns = encoder_slot_count / encoder_slots_per_rev
-    step_error = first_layer_steps - traversal_steps_moved
-
-    print("First layer complete.")
-    print("Expected turns: {}".format(first_layer_turns))
-    print("Actual turns: {:.3f}".format(actual_turns))
-    print("Expected slots: {}".format(target_encoder_slots))
-    print("Actual slots: {}".format(encoder_slot_count))
-    print("Expected traversal steps: {}".format(first_layer_steps))
-    print("Actual traversal steps: {}".format(traversal_steps_moved))
-    print("Step error (expected - actual): {}".format(step_error))
-
 
 def run_test():
     try:
